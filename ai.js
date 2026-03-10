@@ -3,14 +3,19 @@ import cors from "cors";
 import OpenAI from "openai";
 
 const app = express();
-app.use(cors());
+
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-app.post("/ask", async (req, res) => {
+app.get("/", (req, res) => {
+  res.send("Bible AI server running");
+});
+
+app.post("/api/ask", async (req, res) => {
   try {
     const { message } = req.body;
 
@@ -23,7 +28,8 @@ app.post("/ask", async (req, res) => {
       messages: [
         {
           role: "system",
-          content: "You are Shalom, a friendly Bible AI assistant.",
+          content:
+            "You are Shalom, a helpful Bible AI assistant. Answer clearly and warmly, and include scripture references when relevant.",
         },
         {
           role: "user",
@@ -35,14 +41,16 @@ app.post("/ask", async (req, res) => {
     res.json({
       reply: completion.choices?.[0]?.message?.content || "No response from AI.",
     });
-  } catch (error) {
-    console.error("OpenAI server error:", error);
+  } catch (err) {
+    console.error("AI route error:", err);
     res.status(500).json({
-      reply: "There was an error talking to the AI server.",
+      reply: "Server error while contacting OpenAI.",
     });
   }
 });
 
-app.listen(3001, () => {
-  console.log("AI server running on port 3001");
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
