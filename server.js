@@ -10,6 +10,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ---------------- AI Route ---------------- */
@@ -59,18 +60,15 @@ app.post("/create-checkout-session", async (req, res) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-
       payment_method_types: ["card"],
-
       line_items: [
         {
           price: "price_1T9bVmC405SOjqqzlSFleCCe",
           quantity: 1,
         },
       ],
-
-      success_url: "https://outgoing-living-word-daily.com/success",
-      cancel_url: "https://outgoing-living-word-daily.com/cancel",
+      success_url: "https://outgoing-living-word-daily.com?success=true",
+      cancel_url: "https://outgoing-living-word-daily.com?canceled=true",
     });
 
     res.json({ url: session.url });
@@ -88,5 +86,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log("Server running on port " + PORT);
 });
