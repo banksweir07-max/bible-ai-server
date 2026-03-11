@@ -3,16 +3,17 @@ import cors from "cors";
 import OpenAI from "openai";
 
 const app = express();
+const port = process.env.PORT || 10000;
 
-app.use(cors({ origin: "*" }));
+app.use(cors());
 app.use(express.json());
 
-const openai = new OpenAI({
+const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 app.get("/", (req, res) => {
-  res.send("Bible AI server running");
+  res.send("Bible AI server is running.");
 });
 
 app.post("/api/ask", async (req, res) => {
@@ -20,16 +21,16 @@ app.post("/api/ask", async (req, res) => {
     const { message } = req.body;
 
     if (!message) {
-      return res.status(400).json({ reply: "Missing message." });
+      return res.status(400).json({ error: "Message is required." });
     }
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
           content:
-            "You are Shalom, a helpful Bible AI assistant. Answer clearly and warmly, and include scripture references when relevant.",
+            "You are a helpful Bible assistant named Shalom. Answer questions about the Bible clearly, kindly, and accurately.",
         },
         {
           role: "user",
@@ -38,19 +39,16 @@ app.post("/api/ask", async (req, res) => {
       ],
     });
 
-    res.json({
-      reply: completion.choices?.[0]?.message?.content || "No response from AI.",
-    });
-  } catch (err) {
-    console.error("AI route error:", err);
+    const reply = completion.choices?.[0]?.message?.content || "No response.";
+    res.json({ reply });
+  } catch (error) {
+    console.error("API ERROR:", error);
     res.status(500).json({
-      reply: "Server error while contacting OpenAI.",
+      error: error.message || "Something went wrong on the server.",
     });
   }
 });
 
-const PORT = process.env.PORT || 3001;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
