@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import OpenAI from "openai";
+import fetch from "node-fetch";
 import Stripe from "stripe";
 
 const app = express();
@@ -9,69 +9,50 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
-
-/* ============================= */
-/* OpenAI Setup */
-/* ============================= */
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
-/* ============================= */
-/* Stripe Setup */
-/* ============================= */
-
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-/* ============================= */
-/* Test Route */
-/* ============================= */
+/* ---------------- AI Route ---------------- */
 
-app.get("/", (req, res) => {
-  res.send("Bible AI server is running.");
-});
-
-/* ============================= */
-/* AI Endpoint */
-/* ============================= */
-
-app.post("/api/ask", async (req, res) => {
+app.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: "Message required" });
-    }
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are Shalom, a friendly AI assistant that answers Bible questions clearly and kindly."
-        },
-        {
-          role: "user",
-          content: message
-        }
-      ]
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful Christian Bible teacher AI. Answer questions clearly and include Bible references when possible.",
+          },
+          {
+            role: "user",
+            content: message,
+          },
+        ],
+      }),
     });
 
+    const data = await response.json();
+
     res.json({
-      reply: completion.choices[0].message.content
+      reply: data.choices?.[0]?.message?.content || "No response",
     });
 
   } catch (error) {
-    console.error("AI ERROR:", error);
-    res.status(500).json({ error: "AI request failed" });
+    console.error(error);
+    res.status(500).json({ error: "AI server error" });
   }
 });
 
-/* ============================= */
-/* Stripe Subscription */
-/* ============================= */
+/* ---------------- Stripe Subscription ---------------- */
 
 app.post("/create-checkout-session", async (req, res) => {
   try {
@@ -84,26 +65,28 @@ app.post("/create-checkout-session", async (req, res) => {
       line_items: [
         {
           price: "price_1T9bVmC405SOjqqzlSFleCCe",
-          quantity: 1
-        }
+          quantity: 1,
+        },
       ],
 
       success_url: "https://outgoing-living-word-daily.com/success",
-      cancel_url: "https://outgoing-living-word-daily.com/cancel"
+      cancel_url: "https://outgoing-living-word-daily.com/cancel",
     });
 
     res.json({ url: session.url });
 
-  } catch (error) {
-    console.error("Stripe ERROR:", error);
-    res.status(500).json({ error: "Stripe session failed" });
+  } catch (err) {
+    console.error("Stripe error:", err);
+    res.status(500).json({ error: "Stripe checkout failed" });
   }
 });
 
-/* ============================= */
-/* Start Server */
-/* ============================= */
+/* ---------------- Test Route ---------------- */
+
+app.get("/", (req, res) => {
+  res.send("Bible AI server is running.");
+});
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Server running on port", PORT);
 });
