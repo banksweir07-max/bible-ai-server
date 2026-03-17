@@ -145,6 +145,27 @@ function randomPrompt() {
   return prompts[Math.floor(Math.random() * prompts.length)];
 }
 
+function generateRoomCode(length = 5) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+
+  for (let i = 0; i < length; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  return code;
+}
+
+function getUniqueRoomCode() {
+  let code = generateRoomCode();
+
+  while (rooms[code]) {
+    code = generateRoomCode();
+  }
+
+  return code;
+}
+
 function safeSend(ws, data) {
   if (ws.readyState === 1) {
     ws.send(JSON.stringify(data));
@@ -186,6 +207,9 @@ function removePlayerFromRoom(roomCode, playerId) {
     room.drawerId = room.players[0].id;
   }
 
+  room.strokes = room.strokes || [];
+  room.guesses = room.guesses || [];
+
   broadcastRoom(roomCode);
 }
 
@@ -198,13 +222,51 @@ wss.on("connection", (ws) => {
       const data = JSON.parse(message.toString());
       const { type, payload } = data;
 
+      if (type === "create_room") {
+        const { playerId, playerName, color } = payload || {};
+
+        if (!playerId || !playerName) {
+          return safeSend(ws, {
+            type: "error",
+            payload: "Missing room create info",
+          });
+        }
+
+        const roomCode = getUniqueRoomCode();
+
+        ws.playerId = playerId;
+        ws.roomCode = roomCode;
+
+        rooms[roomCode] = {
+          code: roomCode,
+          hostId: playerId,
+          status: "lobby",
+          round: 1,
+          drawerId: playerId,
+          prompt: randomPrompt(),
+          players: [
+            {
+              id: playerId,
+              name: playerName,
+              color: color || "#3b82f6",
+              score: 0,
+            },
+          ],
+          strokes: [],
+          guesses: [],
+        };
+
+        safeSend(ws, {
+          type: "room_created",
+          payload: rooms[roomCode],
+        });
+
+        broadcastRoom(roomCode);
+        return;
+      }
+
       if (type === "join_room") {
-        const {
-          roomCode,
-          playerId,
-          playerName,
-          color,
-        } = payload;
+        const { roomCode, playerId, playerName, color } = payload || {};
 
         if (!roomCode || !playerId || !playerName) {
           return safeSend(ws, {
@@ -213,26 +275,21 @@ wss.on("connection", (ws) => {
           });
         }
 
-        ws.playerId = playerId;
-        ws.roomCode = roomCode;
+        const upperRoomCode = roomCode.toUpperCase();
 
-        if (!rooms[roomCode]) {
-          rooms[roomCode] = {
-            code: roomCode,
-            hostId: playerId,
-            status: "lobby",
-            round: 1,
-            drawerId: playerId,
-            prompt: randomPrompt(),
-            players: [],
-            strokes: [],
-            guesses: [],
-          };
+        if (!rooms[upperRoomCode]) {
+          return safeSend(ws, {
+            type: "error",
+            payload: "Room not found",
+          });
         }
 
-        const room = rooms[roomCode];
+        ws.playerId = playerId;
+        ws.roomCode = upperRoomCode;
 
+        const room = rooms[upperRoomCode];
         const existingPlayer = room.players.find((p) => p.id === playerId);
+
         if (!existingPlayer) {
           room.players.push({
             id: playerId,
@@ -242,7 +299,12 @@ wss.on("connection", (ws) => {
           });
         }
 
-        broadcastRoom(roomCode);
+        safeSend(ws, {
+          type: "joined_room",
+          payload: room,
+        });
+
+        broadcastRoom(upperRoomCode);
         return;
       }
 
@@ -343,11 +405,11 @@ wss.on("connection", (ws) => {
         }
 
         case "next_round": {
+          if (!room.players.length) break;
+
           const currentIndex = room.players.findIndex((p) => p.id === room.drawerId);
           const nextIndex =
-            currentIndex === -1
-              ? 0
-              : (currentIndex + 1) % room.players.length;
+            currentIndex === -1 ? 0 : (currentIndex + 1) % room.players.length;
 
           room.drawerId = room.players[nextIndex]?.id || room.drawerId;
           room.round = (room.round || 1) + 1;
